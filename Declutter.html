@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Declutter</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f2f7f9;
+      color: #333;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #1a5276;
+    }
+    input, button, textarea, select {
+      padding: 10px 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    textarea, input[type="datetime-local"] {
+      width: 100%;
+      margin: 8px 0;
+    }
+    input[type="checkbox"] {
+      width: auto;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+    button {
+      background-color: #1a5276;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #154360;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      background: #d6eaf8;
+      padding: 12px;
+      margin-bottom: 8px;
+      border-left: 4px solid #1a5276;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .why {
+      font-style: italic;
+      color: #555;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .actions {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+    }
+    .actions button {
+      background: transparent;
+      border: none;
+      color: #c0392b;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .completed {
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+    .reminder-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    strong[contenteditable="true"] {
+      flex: 1;
+      outline: none;
+      cursor: text;
+    }
+    .controls-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 20px 0;
+      flex-wrap: wrap;
+    }
+    .controls-row > * {
+      flex-grow: 1;
+      min-width: 120px;
+    }
+    .controls-row button {
+      flex-grow: 0;
+      min-width: auto;
+      padding: 12px 20px;
+    }
+    /* Quick date buttons container */
+    .quick-dates {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+      margin-bottom: 12px;
+    }
+    .quick-dates button {
+      background-color: #2980b9;
+      color: white;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.3s;
+    }
+    .quick-dates button:hover {
+      background-color: #1c5980;
+    }
+  </style>
+</head>
+<body>
+  <h1>Declutter</h1>
+  
+  <textarea id="reminderText" rows="2" placeholder="What do you need to remember?"></textarea>
+  <textarea id="reminderWhy" rows="2" placeholder="Why this matters..."></textarea>
+  <input type="datetime-local" id="reminderTime" min="" />
+
+  <!-- Quick natural language date/time buttons -->
+  <div class="quick-dates">
+    <button onclick="setQuickDate('today', 8)">Today 8 AM</button>
+    <button onclick="setQuickDate('tomorrow', 9)">Tomorrow 9 AM</button>
+    <button onclick="setNextWeekday(1, 10)">Monday 10 AM</button>
+    <button onclick="setQuickDate('today', 19)">Evening 7 PM</button>
+  </div>
+
+  <!-- Controls row: Add button + Search + Filter dropdown -->
+  <div class="controls-row">
+    <button onclick="addReminder()">Add Reminder</button>
+    <input type="text" id="searchInput" placeholder="Search reminders..." oninput="renderReminders()" />
+    <select id="filterSelect" onchange="setFilter(this.value)">
+      <option value="all">All</option>
+      <option value="upcoming">Upcoming</option>
+      <option value="completed">Completed</option>
+      <option value="pending">Pending</option>
+    </select>
+  </div>
+
+  <ul id="reminderList"></ul>
+
+  <script>
+    const reminderList = document.getElementById('reminderList');
+    const reminderTime = document.getElementById('reminderTime');
+    const searchInput = document.getElementById('searchInput');
+    const filterSelect = document.getElementById('filterSelect');
+    let reminders = JSON.parse(localStorage.getItem('declutterReminders')) || [];
+    let currentFilter = 'all';
+
+    // Converts a Date object to a local datetime string (YYYY-MM-DDTHH:mm) suitable for datetime-local input
+    function toLocalDatetimeString(date) {
+      const pad = n => n.toString().padStart(2, '0');
+      const year = date.getFullYear();
+      const month = pad(date.getMonth() + 1);
+      const day = pad(date.getDate());
+      const hour = pad(date.getHours());
+      const minute = pad(date.getMinutes());
+      return `${year}-${month}-${day}T${hour}:${minute}`;
+    }
+
+    function setMinDateTime() {
+      const now = new Date();
+      reminderTime.min = toLocalDatetimeString(now);
+    }
+
+    function renderReminders() {
+      const now = new Date();
+      const filter = currentFilter;
+      const searchTerm = searchInput.value.toLowerCase();
+
+      reminders.sort((a, b) => new Date(a.time) - new Date(b.time));
+      reminderList.innerHTML = '';
+
+      reminders.forEach((reminder, index) => {
+        const reminderDate = new Date(reminder.time);
+        const matchesSearch = 
+          reminder.text.toLowerCase().includes(searchTerm) ||
+          reminder.why.toLowerCase().includes(searchTerm);
+
+        let show = false;
+        if (filter === 'all') {
+          show = true;
+        } else if (filter === 'upcoming') {
+          show = reminderDate > now;
+        } else if (filter === 'completed') {
+          show = reminder.completed === true;
+        } else if (filter === 'pending') {
+          show = !reminder.completed && reminderDate <= now;
+        }
+
+        if (!matchesSearch) show = false;
+
+        if (show) {
+          const li = document.createElement('li');
+          li.className = reminder.completed ? 'completed' : '';
+          li.innerHTML = `
+            <div class="reminder-header">
+              <input type="checkbox" ${reminder.completed ? 'checked' : ''} onchange="toggleComplete(${index})" />
+              <strong contenteditable="true"
+                onblur="editReminder(${index}, 'text', this.innerText)"
+                onmousedown="event.stopPropagation()"
+                onkeydown="event.stopPropagation()"
+                onclick="event.stopPropagation()"
+                spellcheck="false"
+              >${reminder.text}</strong>
+            </div>
+            <span class="why" contenteditable="true" onblur="editReminder(${index}, 'why', this.innerText)" spellcheck="false">${reminder.why}</span>
+            <small>${reminderDate.toLocaleString()}</small>
+            <div class="actions">
+              <button onclick="deleteReminder(${index})" title="Delete reminder">✕</button>
+            </div>
+          `;
+          reminderList.appendChild(li);
+        }
+      });
+    }
+
+    // Set datetime-local input with specific date and hour (minutes=0)
+    function setQuickDate(day, hour) {
+      let d = new Date();
+      if (day === 'today') {
+        // use current day
+      } else if (day === 'tomorrow') {
+        d.setDate(d.getDate() + 1);
+      }
+      d.setHours(hour, 0, 0, 0);
+      reminderTime.value = toLocalDatetimeString(d);
+      reminderTime.min = toLocalDatetimeString(new Date());
+    }
+
+    // Set datetime-local to next occurrence of specific weekday (0=Sun..6=Sat) at hour
+    function setNextWeekday(weekday, hour) {
+      let d = new Date();
+      const day = d.getDay();
+      let daysUntil = (weekday + 7 - day) % 7;
+      if (daysUntil === 0 && d.getHours() >= hour) daysUntil = 7; // next week if today past hour
+      d.setDate(d.getDate() + daysUntil);
+      d.setHours(hour, 0, 0, 0);
+      reminderTime.value = toLocalDatetimeString(d);
+      reminderTime.min = toLocalDatetimeString(new Date());
+    }
+
+    function addReminder() {
+      const text = document.getElementById('reminderText').value.trim();
+      const why = document.getElementById('reminderWhy').value.trim();
+      const time = reminderTime.value;
+      if (!text || !time) {
+        alert('Please enter reminder text and time.');
+        return;
+      }
+
+      const reminder = { text, why, time, notified: false, completed: false };
+      reminders.push(reminder);
+      localStorage.setItem('declutterReminders', JSON.stringify(reminders));
+      document.getElementById('reminderText').value = '';
+      document.getElementById('reminderWhy').value = '';
+      reminderTime.value = '';
+      renderReminders();
+    }
+
+    function deleteReminder(index) {
+      reminders.splice(index, 1);
+      localStorage.setItem('declutterReminders', JSON.stringify(reminders));
+      renderReminders();
+    }
+
+    function editReminder(index, field, value) {
+      reminders[index][field] = value.trim();
+      localStorage.setItem('declutterReminders', JSON.stringify(reminders));
+    }
+
+    function toggleComplete(index) {
+      reminders[index].completed = !reminders[index].completed;
+      localStorage.setItem('declutterReminders', JSON.stringify(reminders));
+      renderReminders();
+    }
+
+    function playSound() {
+      const audio = new Audio('https://notificationsounds.com/storage/sounds/file-sounds-1167-plucky.mp3');
+      audio.play();
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      renderReminders();
+    }
+
+    // Notification checker
+    setInterval(() => {
+      const now = new Date().getTime();
+      reminders.forEach((r, i) => {
+        const rTime = new Date(r.time).getTime();
+        if (now >= rTime && !r.notified && !r.completed) {
+          alert(`Reminder: ${r.text}\nWhy it matters: ${r.why || '(none)'}`);
+          playSound();
+          reminders[i].notified = true;
+          localStorage.setItem('declutterReminders', JSON.stringify(reminders));
+        }
+      });
+    }, 60000);
+
+    // Initial setup
+    setMinDateTime();
+    renderReminders();
+  </script>
+</body>
+</html>
